@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Watermark Remover - Professional Document Cleaning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 shadow-sm">
+        <div class="container mx-auto px-4 py-5 max-w-6xl">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-900">PDF Watermark Remover</h1>
+                        <p class="text-xs text-slate-500">Professional Document Cleaning</p>
+                    </div>
+                </div>
+                <div id="statsDisplay" class="hidden md:flex items-center space-x-6 text-sm">
+                    <div class="text-center">
+                        <div class="font-bold text-slate-900" id="visitorCount">0</div>
+                        <div class="text-xs text-slate-500">Visitors</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 py-12 max-w-6xl">
+        <!-- Hero Section -->
+        <div class="text-center mb-12">
+            <h2 class="text-4xl font-bold text-slate-900 mb-3">
+                Remove Watermarks from PDFs
+            </h2>
+            <p class="text-lg text-slate-600 max-w-2xl mx-auto">
+                Automatically detect and remove watermarks, headers, and footers from your PDF documents. Fast, secure, and completely private.
+            </p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="max-w-4xl mx-auto mb-8">
+            <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-2xl p-16 text-center cursor-pointer hover:border-blue-500 hover:bg-white transition-all bg-white shadow-sm">
+                <svg class="w-16 h-16 mx-auto mb-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p class="text-2xl font-semibold text-slate-700 mb-2">Drop your PDF here</p>
+                <p class="text-slate-500 mb-4">or click to browse your files</p>
+                <p class="text-sm text-slate-400">Maximum file size: 50MB</p>
+                <input type="file" id="fileInput" class="hidden" accept="application/pdf">
+            </div>
+        </div>
+
+        <!-- Features (shown when no file uploaded) -->
+        <div id="features" class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-2">Auto-Detection</h3>
+                <p class="text-slate-600 text-sm">Automatically identifies repetitive watermark text across all pages</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-2">Smart Cleanup</h3>
+                <p class="text-slate-600 text-sm">Intelligently fills removed areas with matching background colors</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-2">100% Private</h3>
+                <p class="text-slate-600 text-sm">All processing happens in memory. Files are never stored on servers</p>
+            </div>
+        </div>
+
+        <!-- Processing Section (hidden initially) -->
+        <div id="processingSection" class="hidden max-w-6xl mx-auto">
+            <!-- Auto-detect Info -->
+            <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <p class="text-green-900 font-medium">Auto-Detection Complete</p>
+                        <p class="text-green-700 text-sm mt-1">
+                            Detected watermarks: <span id="detectedText" class="font-mono"></span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Controls -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left: Settings -->
+                    <div class="space-y-6">
+                        <div class="border-b border-slate-200 pb-4 mb-6">
+                            <h3 class="text-xl font-semibold text-slate-900">Removal Settings</h3>
+                            <p class="text-sm text-slate-500 mt-1">Customize what to remove from your PDF</p>
+                        </div>
+                        
+                        <!-- Keywords -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-slate-700">Keywords to Remove</label>
+                            <input 
+                                type="text" 
+                                id="keywords" 
+                                class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                placeholder="Enter keywords separated by commas"
+                            >
+                            <p class="text-xs text-slate-500">Example: CONFIDENTIAL, DRAFT, Company Name</p>
+                        </div>
+
+                        <!-- Match Case -->
+                        <div class="flex items-center space-x-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <input 
+                                type="checkbox" 
+                                id="matchCase" 
+                                class="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            >
+                            <div>
+                                <label for="matchCase" class="text-sm font-medium text-slate-700 cursor-pointer">Match Case</label>
+                                <p class="text-xs text-slate-500">Enable case-sensitive keyword matching</p>
+                            </div>
+                        </div>
+
+                        <!-- Sliders -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-slate-700">Top Margin</label>
+                                <div class="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <input 
+                                        type="range" 
+                                        id="headerHeight" 
+                                        min="0" 
+                                        max="150" 
+                                        value="0"
+                                        class="w-full"
+                                    >
+                                    <div class="text-center mt-3">
+                                        <span id="headerValue" class="text-2xl font-bold text-blue-600">0</span>
+                                        <span class="text-sm text-slate-500 ml-1">px</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-slate-700">Bottom Margin</label>
+                                <div class="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <input 
+                                        type="range" 
+                                        id="footerHeight" 
+                                        min="0" 
+                                        max="150" 
+                                        value="25"
+                                        class="w-full"
+                                    >
+                                    <div class="text-center mt-3">
+                                        <span id="footerValue" class="text-2xl font-bold text-blue-600">25</span>
+                                        <span class="text-sm text-slate-500 ml-1">px</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Button -->
+                        <div class="pt-4">
+                            <button id="downloadBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-sm">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                </svg>
+                                <span>Download Clean PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Preview -->
+                    <div class="space-y-4">
+                        <div class="border-b border-slate-200 pb-4">
+                            <h3 class="text-xl font-semibold text-slate-900">Live Preview</h3>
+                            <p class="text-sm text-slate-500 mt-1">Updates automatically as you adjust settings</p>
+                        </div>
+                        <div id="previewContainer" class="bg-slate-100 rounded-lg border-2 border-slate-200 min-h-[600px] flex items-center justify-center overflow-hidden">
+                            <div id="previewPlaceholder" class="hidden text-center p-8">
+                                <svg class="w-16 h-16 mx-auto text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                <p class="text-slate-500 font-medium">Generating preview...</p>
+                            </div>
+                            <img id="previewImage" class="hidden max-w-full h-auto rounded shadow-sm" alt="PDF Preview">
+                            <div id="previewLoading" class="text-center">
+                                <div class="animate-spin inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+                                <p class="text-slate-600 mt-4 font-medium">Generating preview...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 shadow-2xl text-center max-w-sm">
+                <div class="animate-spin inline-block w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-4"></div>
+                <p class="text-xl font-semibold text-slate-800 mb-2">Processing PDF</p>
+                <p class="text-sm text-slate-500">This may take a moment...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 mt-20 py-8 bg-white">
+        <div class="container mx-auto px-4 max-w-6xl">
+            <div class="text-center text-sm text-slate-500">
+                <p class="mb-4">Made with care for document privacy and security</p>
+                <div class="flex justify-center items-center">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span id="footerVisitorCount">0</span>
+                        <span>total visitors</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
