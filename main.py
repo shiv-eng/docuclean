@@ -75,6 +75,15 @@ class AnalyticsStats(BaseModel):
     total_downloads: int
     total_events: int
 
+class AdminStats(BaseModel):
+    unique_users: int
+    repeat_users: int
+    total_uploads: int
+    total_downloads: int
+    page_visits: int
+    upload_events: int
+    download_events: int
+
 # Analytics functions
 def track_analytics_event(event: AnalyticsEvent, request: Request):
     """Store analytics event in database"""
@@ -104,7 +113,7 @@ def track_analytics_event(event: AnalyticsEvent, request: Request):
     conn.close()
 
 def get_analytics_stats() -> AnalyticsStats:
-    """Get current analytics statistics"""
+    """Get current analytics statistics for public view"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -143,6 +152,63 @@ def get_analytics_stats() -> AnalyticsStats:
         total_uploads=total_uploads,
         total_downloads=total_downloads,
         total_events=total_events
+    )
+
+def get_admin_stats() -> AdminStats:
+    """Get detailed analytics statistics for admin"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Count unique users (first-time visitors)
+    cursor.execute("""
+        SELECT COUNT(DISTINCT session_id)
+        FROM analytics
+        WHERE event_type = 'page_visit'
+    """)
+    total_visitors = cursor.fetchone()[0]
+    
+    # Count repeat users (sessions with multiple page visits)
+    cursor.execute("""
+        SELECT COUNT(DISTINCT session_id)
+        FROM analytics
+        WHERE event_type = 'page_visit'
+        GROUP BY session_id
+        HAVING COUNT(*) > 1
+    """)
+    repeat_users = len(cursor.fetchall())
+    
+    unique_users = total_visitors - repeat_users
+    
+    # Total uploads
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
+    total_uploads = cursor.fetchone()[0]
+    
+    # Total downloads
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
+    total_downloads = cursor.fetchone()[0]
+    
+    # Page visit events
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'page_visit'")
+    page_visits = cursor.fetchone()[0]
+    
+    # Upload events
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
+    upload_events = cursor.fetchone()[0]
+    
+    # Download events
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
+    download_events = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return AdminStats(
+        unique_users=unique_users,
+        repeat_users=repeat_users,
+        total_uploads=total_uploads,
+        total_downloads=total_downloads,
+        page_visits=page_visits,
+        upload_events=upload_events,
+        download_events=download_events
     )
 
 # PDF Processing Functions
@@ -324,7 +390,7 @@ async def track_event(event: AnalyticsEvent, request: Request):
 
 @app.get("/analytics/stats")
 async def get_stats():
-    """Get current analytics statistics"""
+    """Get current analytics statistics (public - only visitor count)"""
     try:
         stats = get_analytics_stats()
         return stats
@@ -332,9 +398,92 @@ async def get_stats():
         print(f"Stats retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/analytics/admin-stats")
+async def get_admin_statistics():
+    """Get detailed admin statistics"""
+    try:
+        stats = get_admin_stats()
+        return stats
+    except Exception as e:
+        print(f"Admin stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/recent-activity")
+async def get_recent_activity(limit: int = 20):
+    """Get recent activity with user type detection"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Get recent events with repeat user detection
+        cursor.execute("""
+            WITH session_counts AS (
+                SELECT session_id, COUNT(*) as visit_count
+                FROM analytics
+                WHERE event_type = 'page_visit'
+                GROUP BY session_id
+            )
+            SELECT 
+                a.session_id, 
+                a.event_type, 
+                a.timestamp,
+                CASE WHEN sc.visit_count > 1 THEN 1 ELSE 0 END as is_repeat
+            FROM analytics a
+            LEFT JOIN session_counts sc ON a.session_id = sc.session_id
+            ORDER BY a.timestamp DESC
+            LIMIT ?
+        """, (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        activities = []
+        for row in rows:
+            activities.append({
+                "session_id": row[0],
+                "event_type": row[1],
+                "timestamp": row[2],
+                "is_repeat": bool(row[3])
+            })
+        
+        return {"activities": activities}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/export-csv")
+async def export_csv():
+    """Export analytics as CSV"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT session_id, event_type, timestamp, file_size, ip_address
+            FROM analytics
+            ORDER BY timestamp DESC
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Create CSV
+        csv_content = "Session ID,Event Type,Timestamp,File Size,IP Address\n"
+        for row in rows:
+            csv_content += f"{row[0]},{row[1]},{row[2]},{row[3] or ''},{row[4] or ''}\n"
+        
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=analytics_export.csv"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/analytics/export")
 async def export_analytics():
-    """Export all analytics data (for admin use)"""
+    """Export all analytics data (JSON format)"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
@@ -349,7 +498,6 @@ async def export_analytics():
         rows = cursor.fetchall()
         conn.close()
         
-        # Convert to list of dicts
         data = []
         for row in rows:
             data.append({
@@ -373,8 +521,7 @@ if os.path.exists(FRONTEND_DIR):
 else:
     print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
 
-
-    if __name__ == "__main__":
+if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
