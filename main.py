@@ -2,6 +2,8 @@ import os
 import io
 import sqlite3
 import fitz  # PyMuPDF
+import uvicorn
+import os
 from collections import Counter
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
@@ -10,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
+
+    
 
 app = FastAPI(title="PDF Watermark Remover")
 
@@ -521,7 +525,7 @@ if os.path.exists(FRONTEND_DIR):
 else:
     print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
     import uvicorn
     import os
     
