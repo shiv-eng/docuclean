@@ -553,6 +553,8 @@ if os.path.exists(FRONTEND_DIR):
 else:
     print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
 
+    
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
