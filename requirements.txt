@@ -1,6 +1,6 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
 python-multipart==0.0.6
-PyMuPDF==1.23.26
-pymupdf-fonts==1.0.5
-Pillow==10.2.0
+PyMuPDF==1.23.8
+Pillow==10.1.0
+pydantic==2.5.0
