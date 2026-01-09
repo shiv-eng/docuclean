@@ -563,6 +563,10 @@ async def export_csv():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/analytics/export")
 async def export_analytics():
