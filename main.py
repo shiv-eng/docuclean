@@ -1,9 +1,8 @@
 import os
 import io
 import sqlite3
+import tempfile
 import fitz  # PyMuPDF
-import uvicorn
-import os
 from collections import Counter
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
@@ -12,8 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
-
-    
 
 app = FastAPI(title="PDF Watermark Remover")
 
@@ -25,42 +22,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database setup
-DB_FILE = "analytics.db"
+# Database setup - Use temp directory for Railway
+DB_FILE = os.path.join(tempfile.gettempdir(), "analytics.db")
 
 def init_database():
     """Initialize SQLite database for analytics"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Create analytics table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS analytics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            file_size INTEGER,
-            file_extension TEXT,
-            user_agent TEXT,
-            ip_address TEXT
-        )
-    """)
-    
-    # Create index for faster queries
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_session_id ON analytics(session_id)
-    """)
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_event_type ON analytics(event_type)
-    """)
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_timestamp ON analytics(timestamp)
-    """)
-    
-    conn.commit()
-    conn.close()
-    print("✅ Database initialized successfully")
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Create analytics table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS analytics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                file_size INTEGER,
+                file_extension TEXT,
+                user_agent TEXT,
+                ip_address TEXT
+            )
+        """)
+        
+        # Create index for faster queries
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_session_id ON analytics(session_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_event_type ON analytics(event_type)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_timestamp ON analytics(timestamp)
+        """)
+        
+        conn.commit()
+        conn.close()
+        print(f"✅ Database initialized successfully at {DB_FILE}")
+    except Exception as e:
+        print(f"⚠️ Database initialization error: {e}")
 
 # Initialize database on startup
 init_database()
@@ -91,129 +91,129 @@ class AdminStats(BaseModel):
 # Analytics functions
 def track_analytics_event(event: AnalyticsEvent, request: Request):
     """Store analytics event in database"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    user_agent = request.headers.get("user-agent", "")
-    # Get real IP, considering proxies
-    ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
-    if "," in ip_address:
-        ip_address = ip_address.split(",")[0].strip()
-    
-    cursor.execute("""
-        INSERT INTO analytics (session_id, event_type, timestamp, file_size, file_extension, user_agent, ip_address)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        event.session_id,
-        event.event_type,
-        event.timestamp,
-        event.file_size,
-        event.file_name,
-        user_agent,
-        ip_address
-    ))
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        user_agent = request.headers.get("user-agent", "")
+        ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+        if "," in ip_address:
+            ip_address = ip_address.split(",")[0].strip()
+        
+        cursor.execute("""
+            INSERT INTO analytics (session_id, event_type, timestamp, file_size, file_extension, user_agent, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            event.session_id,
+            event.event_type,
+            event.timestamp,
+            event.file_size,
+            event.file_name,
+            user_agent,
+            ip_address
+        ))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Analytics tracking error: {e}")
 
 def get_analytics_stats() -> AnalyticsStats:
     """Get current analytics statistics for public view"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Count unique visitors (unique session IDs with page_visit event)
-    cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
-        FROM analytics
-        WHERE event_type = 'page_visit'
-    """)
-    unique_visitors = cursor.fetchone()[0]
-    
-    # Count total uploads
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM analytics
-        WHERE event_type = 'file_upload'
-    """)
-    total_uploads = cursor.fetchone()[0]
-    
-    # Count total downloads
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM analytics
-        WHERE event_type = 'file_download'
-    """)
-    total_downloads = cursor.fetchone()[0]
-    
-    # Total events
-    cursor.execute("SELECT COUNT(*) FROM analytics")
-    total_events = cursor.fetchone()[0]
-    
-    conn.close()
-    
-    return AnalyticsStats(
-        unique_visitors=unique_visitors,
-        total_uploads=total_uploads,
-        total_downloads=total_downloads,
-        total_events=total_events
-    )
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(DISTINCT session_id)
+            FROM analytics
+            WHERE event_type = 'page_visit'
+        """)
+        unique_visitors = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM analytics
+            WHERE event_type = 'file_upload'
+        """)
+        total_uploads = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM analytics
+            WHERE event_type = 'file_download'
+        """)
+        total_downloads = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics")
+        total_events = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return AnalyticsStats(
+            unique_visitors=unique_visitors,
+            total_uploads=total_uploads,
+            total_downloads=total_downloads,
+            total_events=total_events
+        )
+    except Exception as e:
+        print(f"Stats error: {e}")
+        return AnalyticsStats(unique_visitors=0, total_uploads=0, total_downloads=0, total_events=0)
 
 def get_admin_stats() -> AdminStats:
     """Get detailed analytics statistics for admin"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Count unique users (first-time visitors)
-    cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
-        FROM analytics
-        WHERE event_type = 'page_visit'
-    """)
-    total_visitors = cursor.fetchone()[0]
-    
-    # Count repeat users (sessions with multiple page visits)
-    cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
-        FROM analytics
-        WHERE event_type = 'page_visit'
-        GROUP BY session_id
-        HAVING COUNT(*) > 1
-    """)
-    repeat_users = len(cursor.fetchall())
-    
-    unique_users = total_visitors - repeat_users
-    
-    # Total uploads
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
-    total_uploads = cursor.fetchone()[0]
-    
-    # Total downloads
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
-    total_downloads = cursor.fetchone()[0]
-    
-    # Page visit events
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'page_visit'")
-    page_visits = cursor.fetchone()[0]
-    
-    # Upload events
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
-    upload_events = cursor.fetchone()[0]
-    
-    # Download events
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
-    download_events = cursor.fetchone()[0]
-    
-    conn.close()
-    
-    return AdminStats(
-        unique_users=unique_users,
-        repeat_users=repeat_users,
-        total_uploads=total_uploads,
-        total_downloads=total_downloads,
-        page_visits=page_visits,
-        upload_events=upload_events,
-        download_events=download_events
-    )
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(DISTINCT session_id)
+            FROM analytics
+            WHERE event_type = 'page_visit'
+        """)
+        total_visitors = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(DISTINCT session_id)
+            FROM analytics
+            WHERE event_type = 'page_visit'
+            GROUP BY session_id
+            HAVING COUNT(*) > 1
+        """)
+        repeat_users = len(cursor.fetchall())
+        
+        unique_users = total_visitors - repeat_users
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
+        total_uploads = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
+        total_downloads = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'page_visit'")
+        page_visits = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
+        upload_events = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
+        download_events = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return AdminStats(
+            unique_users=unique_users,
+            repeat_users=repeat_users,
+            total_uploads=total_uploads,
+            total_downloads=total_downloads,
+            page_visits=page_visits,
+            upload_events=upload_events,
+            download_events=download_events
+        )
+    except Exception as e:
+        print(f"Admin stats error: {e}")
+        return AdminStats(unique_users=0, repeat_users=0, total_uploads=0, total_downloads=0, 
+                         page_visits=0, upload_events=0, download_events=0)
 
 # PDF Processing Functions
 def detect_watermark_candidates(file_bytes):
@@ -238,7 +238,6 @@ def detect_watermark_candidates(file_bytes):
 
 def clean_page_logic(page, header_h, footer_h, keywords, match_case=False):
     """Clean a single page by removing keywords and masking margins"""
-    # Remove text watermarks
     if keywords:
         for keyword in keywords:
             for quad in page.search_for(keyword):
@@ -249,7 +248,6 @@ def clean_page_logic(page, header_h, footer_h, keywords, match_case=False):
                 page.add_redact_annot(quad, fill=None)
         page.apply_redactions()
 
-    # Sample background color and mask margins
     rect = page.rect
     clip = fitz.Rect(0, rect.height - 10, 1, rect.height - 9)
     pix = page.get_pixmap(clip=clip)
@@ -303,10 +301,20 @@ def generate_preview_image(file_bytes, keywords, header_h, footer_h, match_case=
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
-# Debug: Print paths
-print(f"BASE_DIR: {BASE_DIR}")
-print(f"FRONTEND_DIR: {FRONTEND_DIR}")
-print(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
+# API Routes - Health Check (IMPORTANT FOR RAILWAY)
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Railway"""
+    return {
+        "status": "healthy",
+        "service": "DocuClean PDF Watermark Remover",
+        "version": "1.0.0"
+    }
+
+@app.get("/api/health")
+async def api_health():
+    """Alternative health check"""
+    return {"status": "ok"}
 
 # API Routes - Main
 @app.get("/")
@@ -315,9 +323,13 @@ async def serve_index():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     
     if not os.path.exists(index_path):
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Frontend not found at {index_path}. Please create a 'frontend' folder with index.html"
+        return JSONResponse(
+            content={
+                "message": "Welcome to DocuClean API",
+                "status": "running",
+                "frontend": "not found",
+                "health": "/health"
+            }
         )
     return FileResponse(index_path)
 
@@ -394,7 +406,7 @@ async def track_event(event: AnalyticsEvent, request: Request):
 
 @app.get("/analytics/stats")
 async def get_stats():
-    """Get current analytics statistics (public - only visitor count)"""
+    """Get current analytics statistics"""
     try:
         stats = get_analytics_stats()
         return stats
@@ -414,12 +426,11 @@ async def get_admin_statistics():
 
 @app.get("/analytics/recent-activity")
 async def get_recent_activity(limit: int = 20):
-    """Get recent activity with user type detection"""
+    """Get recent activity"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Get recent events with repeat user detection
         cursor.execute("""
             WITH session_counts AS (
                 SELECT session_id, COUNT(*) as visit_count
@@ -470,7 +481,6 @@ async def export_csv():
         rows = cursor.fetchall()
         conn.close()
         
-        # Create CSV
         csv_content = "Session ID,Event Type,Timestamp,File Size,IP Address\n"
         for row in rows:
             csv_content += f"{row[0]},{row[1]},{row[2]},{row[3] or ''},{row[4] or ''}\n"
@@ -479,46 +489,13 @@ async def export_csv():
             content=csv_content,
             media_type="text/csv",
             headers={
-                "Content-Disposition": f"attachment; filename=analytics_export.csv"
+                "Content-Disposition": "attachment; filename=analytics_export.csv"
             }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/analytics/export")
-async def export_analytics():
-    """Export all analytics data (JSON format)"""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT session_id, event_type, timestamp, file_size, 
-                   file_extension, user_agent, ip_address
-            FROM analytics
-            ORDER BY timestamp DESC
-        """)
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        data = []
-        for row in rows:
-            data.append({
-                "session_id": row[0],
-                "event_type": row[1],
-                "timestamp": row[2],
-                "file_size": row[3],
-                "file_extension": row[4],
-                "user_agent": row[5],
-                "ip_address": row[6]
-            })
-        
-        return JSONResponse(content={"data": data, "total": len(data)})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Mount static files ONLY if frontend directory exists
+# Mount static files
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
     print(f"✅ Static files mounted from: {FRONTEND_DIR}")
@@ -527,12 +504,13 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    import os
     
-    # Railway automatically sets PORT environment variable
+    # Get PORT from environment
     port = int(os.environ.get("PORT", 8000))
     
-    print(f"🚀 Starting server on port {port}")
+    print(f"🚀 Starting DocuClean on port {port}")
+    print(f"📁 Database: {DB_FILE}")
+    print(f"📂 Frontend: {FRONTEND_DIR}")
     
     uvicorn.run(
         app, 
