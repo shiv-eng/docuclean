@@ -440,6 +440,57 @@ async def get_admin_statistics():
         print(f"Admin stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/analytics/user-details")
+async def get_user_details():
+    """Get detailed breakdown of each user's activity"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Get comprehensive user activity
+        cursor.execute("""
+            WITH user_stats AS (
+                SELECT 
+                    session_id,
+                    SUM(CASE WHEN event_type = 'page_visit' THEN 1 ELSE 0 END) as visit_count,
+                    SUM(CASE WHEN event_type = 'file_upload' THEN 1 ELSE 0 END) as upload_count,
+                    SUM(CASE WHEN event_type = 'file_download' THEN 1 ELSE 0 END) as download_count,
+                    MIN(timestamp) as first_seen,
+                    MAX(timestamp) as last_seen
+                FROM analytics
+                GROUP BY session_id
+            )
+            SELECT 
+                session_id,
+                visit_count,
+                upload_count,
+                download_count,
+                first_seen,
+                last_seen,
+                CASE WHEN visit_count > 1 THEN 1 ELSE 0 END as is_repeat
+            FROM user_stats
+            ORDER BY last_seen DESC
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        users = []
+        for row in rows:
+            users.append({
+                "session_id": row[0],
+                "visit_count": row[1],
+                "upload_count": row[2],
+                "download_count": row[3],
+                "first_seen": row[4],
+                "last_seen": row[5],
+                "is_repeat": bool(row[6])
+            })
+        
+        return {"users": users}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/analytics/recent-activity")
 async def get_recent_activity(limit: int = 20):
     """Get recent activity with user type detection"""
@@ -552,8 +603,6 @@ if os.path.exists(FRONTEND_DIR):
     print(f"✅ Static files mounted from: {FRONTEND_DIR}")
 else:
     print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
-
-    
 
 if __name__ == "__main__":
     import uvicorn

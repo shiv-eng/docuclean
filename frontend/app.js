@@ -19,9 +19,12 @@ const previewPlaceholder = document.getElementById('previewPlaceholder');
 const previewLoading = document.getElementById('previewLoading');
 const loadingIndicator = document.getElementById('loadingIndicator');
 const detectedText = document.getElementById('detectedText');
+const toggleSettings = document.getElementById('toggleSettings');
+const settingsPanel = document.getElementById('settingsPanel');
+const toggleText = document.getElementById('toggleText');
+const toggleIcon = document.getElementById('toggleIcon');
 
 // Stats display elements (only visitor count now)
-const visitorCount = document.getElementById('visitorCount');
 const footerVisitorCount = document.getElementById('footerVisitorCount');
 
 // Generate or retrieve session ID
@@ -62,7 +65,6 @@ async function loadStats() {
             const stats = await response.json();
             
             // Update only visitor count for public view
-            if (visitorCount) visitorCount.textContent = stats.unique_visitors.toLocaleString();
             if (footerVisitorCount) footerVisitorCount.textContent = stats.unique_visitors.toLocaleString();
         }
     } catch (error) {
@@ -112,6 +114,20 @@ dropzone.addEventListener('drop', (e) => {
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
         handleFileUpload(e.target.files[0]);
+    }
+});
+
+// Toggle settings panel
+toggleSettings.addEventListener('click', () => {
+    const isHidden = settingsPanel.classList.contains('hidden');
+    if (isHidden) {
+        settingsPanel.classList.remove('hidden');
+        toggleText.textContent = 'Hide Advanced';
+        toggleIcon.style.transform = 'rotate(180deg)';
+    } else {
+        settingsPanel.classList.add('hidden');
+        toggleText.textContent = 'Show Advanced';
+        toggleIcon.style.transform = 'rotate(0deg)';
     }
 });
 
