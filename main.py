@@ -10,8 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
+import traceback
 
-app = FastAPI(title="PDF Watermark Remover")
+app = FastAPI(title="DocuClean - PDF Watermark Remover")
 
 # Enable CORS
 app.add_middleware(
@@ -28,8 +29,7 @@ def init_database():
     """Initialize SQLite database for analytics"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    
-    # Create analytics table
+   
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS analytics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,8 +42,7 @@ def init_database():
             ip_address TEXT
         )
     """)
-    
-    # Create index for faster queries
+   
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_session_id ON analytics(session_id)
     """)
@@ -53,15 +52,14 @@ def init_database():
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_timestamp ON analytics(timestamp)
     """)
-    
+   
     conn.commit()
     conn.close()
     print("✅ Database initialized successfully")
 
-# Initialize database on startup
 init_database()
 
-# Pydantic models for analytics
+# Pydantic models
 class AnalyticsEvent(BaseModel):
     session_id: str
     event_type: str
@@ -81,72 +79,57 @@ class AdminStats(BaseModel):
     total_uploads: int
     total_downloads: int
     page_visits: int
-    upload_events: int
-    download_events: int
 
 # Analytics functions
 def track_analytics_event(event: AnalyticsEvent, request: Request):
     """Store analytics event in database"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    user_agent = request.headers.get("user-agent", "")
-    # Get real IP, considering proxies
-    ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
-    if "," in ip_address:
-        ip_address = ip_address.split(",")[0].strip()
-    
-    cursor.execute("""
-        INSERT INTO analytics (session_id, event_type, timestamp, file_size, file_extension, user_agent, ip_address)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        event.session_id,
-        event.event_type,
-        event.timestamp,
-        event.file_size,
-        event.file_name,
-        user_agent,
-        ip_address
-    ))
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+       
+        user_agent = request.headers.get("user-agent", "")
+        ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+        if "," in ip_address:
+            ip_address = ip_address.split(",")[0].strip()
+       
+        cursor.execute("""
+            INSERT INTO analytics (session_id, event_type, timestamp, file_size, file_extension, user_agent, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            event.session_id,
+            event.event_type,
+            event.timestamp,
+            event.file_size,
+            event.file_name,
+            user_agent,
+            ip_address
+        ))
+       
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Analytics error: {e}")
 
 def get_analytics_stats() -> AnalyticsStats:
-    """Get current analytics statistics for public view"""
+    """Get current analytics statistics"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    
-    # Count unique visitors (unique session IDs with page_visit event)
-    cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
-        FROM analytics
-        WHERE event_type = 'page_visit'
-    """)
+   
+    # Count unique users (by session_id)
+    cursor.execute("SELECT COUNT(DISTINCT session_id) FROM analytics WHERE event_type = 'page_visit'")
     unique_visitors = cursor.fetchone()[0]
-    
-    # Count total uploads
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM analytics
-        WHERE event_type = 'file_upload'
-    """)
+   
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
     total_uploads = cursor.fetchone()[0]
-    
-    # Count total downloads
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM analytics
-        WHERE event_type = 'file_download'
-    """)
+   
+    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
     total_downloads = cursor.fetchone()[0]
-    
-    # Total events
+   
     cursor.execute("SELECT COUNT(*) FROM analytics")
     total_events = cursor.fetchone()[0]
-    
+   
     conn.close()
-    
+   
     return AnalyticsStats(
         unique_visitors=unique_visitors,
         total_uploads=total_uploads,
@@ -155,60 +138,39 @@ def get_analytics_stats() -> AnalyticsStats:
     )
 
 def get_admin_stats() -> AdminStats:
-    """Get detailed analytics statistics for admin"""
+    """Get detailed analytics statistics with proper user classification"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    
-    # Count unique users (first-time visitors)
+   
+    # Get all unique users with their visit counts
     cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
-        FROM analytics
-        WHERE event_type = 'page_visit'
-    """)
-    total_visitors = cursor.fetchone()[0]
-    
-    # Count repeat users (sessions with multiple page visits)
-    cursor.execute("""
-        SELECT COUNT(DISTINCT session_id)
+        SELECT session_id, COUNT(*) as visit_count
         FROM analytics
         WHERE event_type = 'page_visit'
         GROUP BY session_id
-        HAVING COUNT(*) > 1
     """)
-    repeat_users = len(cursor.fetchall())
     
-    unique_users = total_visitors - repeat_users
-    
-    # Total uploads
+    users = cursor.fetchall()
+    unique_users = sum(1 for _, count in users if count == 1)
+    repeat_users = sum(1 for _, count in users if count > 1)
+   
     cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
     total_uploads = cursor.fetchone()[0]
-    
-    # Total downloads
+   
     cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
     total_downloads = cursor.fetchone()[0]
-    
-    # Page visit events
+   
     cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'page_visit'")
     page_visits = cursor.fetchone()[0]
-    
-    # Upload events
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
-    upload_events = cursor.fetchone()[0]
-    
-    # Download events
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
-    download_events = cursor.fetchone()[0]
-    
+   
     conn.close()
-    
+   
     return AdminStats(
         unique_users=unique_users,
         repeat_users=repeat_users,
         total_uploads=total_uploads,
         total_downloads=total_downloads,
-        page_visits=page_visits,
-        upload_events=upload_events,
-        download_events=download_events
+        page_visits=page_visits
     )
 
 # PDF Processing Functions
@@ -230,64 +192,61 @@ def detect_watermark_candidates(file_bytes):
         return candidates
     except Exception as e:
         print(f"Detection error: {e}")
+        traceback.print_exc()
         return []
 
 def clean_page_logic(page, header_h, footer_h, keywords, match_case=False):
     """Clean a single page by removing keywords and masking margins"""
-    # Remove text watermarks
-    if keywords:
-        for keyword in keywords:
-            for quad in page.search_for(keyword):
-                if match_case:
-                    txt = page.get_text("text", clip=quad)
-                    if keyword not in txt:
-                        continue
-                page.add_redact_annot(quad, fill=None)
-        page.apply_redactions()
+    try:
+        if keywords:
+            for keyword in keywords:
+                if not keyword:
+                    continue
+                for quad in page.search_for(keyword):
+                    if match_case:
+                        txt = page.get_text("text", clip=quad)
+                        if keyword not in txt:
+                            continue
+                    page.add_redact_annot(quad, fill=None)
+            page.apply_redactions()
 
-    # Sample background color and mask margins
-    rect = page.rect
-    clip = fitz.Rect(0, rect.height - 10, 1, rect.height - 9)
-    pix = page.get_pixmap(clip=clip)
-    r, g, b = pix.pixel(0, 0)
-    bg = (r / 255, g / 255, b / 255)
+        rect = page.rect
+        clip = fitz.Rect(0, rect.height - 10, 1, rect.height - 9)
+        pix = page.get_pixmap(clip=clip)
+        r, g, b = pix.pixel(0, 0)
+        bg = (r / 255, g / 255, b / 255)
 
-    if footer_h > 0:
-        page.draw_rect(
-            fitz.Rect(0, rect.height - footer_h, rect.width, rect.height),
-            color=bg, fill=bg
-        )
+        if footer_h > 0:
+            page.draw_rect(
+                fitz.Rect(0, rect.height - footer_h, rect.width, rect.height),
+                color=bg, fill=bg
+            )
 
-    if header_h > 0:
-        page.draw_rect(
-            fitz.Rect(0, 0, rect.width, header_h),
-            color=bg, fill=bg
-        )
+        if header_h > 0:
+            page.draw_rect(
+                fitz.Rect(0, 0, rect.width, header_h),
+                color=bg, fill=bg
+            )
+    except Exception as e:
+        print(f"Error in clean_page_logic: {e}")
+        traceback.print_exc()
 
 def process_pdf_document(file_bytes, keywords, header_h, footer_h, match_case=False):
     """Process entire PDF document"""
     try:
-        print(f"Opening PDF document, size: {len(file_bytes)} bytes")
         doc = fitz.open(stream=file_bytes, filetype="pdf")
-        print(f"PDF opened successfully, pages: {len(doc)}")
-        
         doc.set_metadata({})
-        
-        for i, page in enumerate(doc):
-            print(f"Processing page {i+1}/{len(doc)}")
+       
+        for page in doc:
             clean_page_logic(page, header_h, footer_h, keywords, match_case)
-        
-        print("Saving processed PDF...")
+       
         out = io.BytesIO()
         doc.save(out)
         doc.close()
         out.seek(0)
-        result = out.getvalue()
-        print(f"PDF saved, size: {len(result)} bytes")
-        return result
+        return out.getvalue()
     except Exception as e:
         print(f"Error in process_pdf_document: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise
 
@@ -297,7 +256,7 @@ def generate_preview_image(file_bytes, keywords, header_h, footer_h, match_case=
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         if len(doc) == 0:
             return None
-        
+       
         page = doc[0]
         clean_page_logic(page, header_h, footer_h, keywords, match_case)
         pix = page.get_pixmap(dpi=150)
@@ -306,67 +265,98 @@ def generate_preview_image(file_bytes, keywords, header_h, footer_h, match_case=
         return img_bytes
     except Exception as e:
         print(f"Preview error: {e}")
+        traceback.print_exc()
         return None
 
-# Get the correct paths
+# Get paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
-# Debug: Print paths
-print(f"BASE_DIR: {BASE_DIR}")
-print(f"FRONTEND_DIR: {FRONTEND_DIR}")
-print(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
-
-# API Routes - Main
+# API Routes
 @app.get("/")
 async def serve_index():
     """Serve the frontend HTML"""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
-    
     if not os.path.exists(index_path):
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Frontend not found at {index_path}. Please create a 'frontend' folder with index.html"
-        )
+        raise HTTPException(status_code=404, detail=f"Frontend not found at {index_path}")
     return FileResponse(index_path)
+
+@app.get("/admin")
+async def serve_admin():
+    """Serve the admin dashboard"""
+    admin_path = os.path.join(FRONTEND_DIR, "admin.html")
+    if not os.path.exists(admin_path):
+        raise HTTPException(status_code=404, detail=f"Admin dashboard not found")
+    return FileResponse(admin_path)
 
 @app.post("/analyze")
 async def analyze_pdf(file: UploadFile = File(...)):
     """Analyze PDF and detect watermark candidates"""
     try:
+        # Validate file type
+        if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+       
         contents = await file.read()
+       
+        # Validate PDF content
+        if len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+       
+        # Validate file size (50MB max)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if len(contents) > max_size:
+            raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+       
         keywords = detect_watermark_candidates(contents)
         return {"keywords": ", ".join(keywords)}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Analysis error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to analyze PDF: {str(e)}")
 
 @app.post("/preview")
-async def preview_pdf(
+async def preview_file(
     file: UploadFile = File(...),
     keywords: str = Form(""),
     header_h: int = Form(0),
     footer_h: int = Form(25),
     match_case: bool = Form(False)
 ):
-    """Generate preview image of cleaned PDF"""
+    """Generate preview of cleaned PDF"""
     try:
+        # Validate file type
+        if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+       
         contents = await file.read()
+       
+        if len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+       
+        # Validate file size
+        max_size = 50 * 1024 * 1024
+        if len(contents) > max_size:
+            raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+       
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
-        
         preview_bytes = generate_preview_image(contents, kw_list, header_h, footer_h, match_case)
-        
+       
         if preview_bytes is None:
             raise HTTPException(status_code=400, detail="Could not generate preview")
-        
-        return Response(
-            content=preview_bytes,
-            media_type="image/png"
-        )
+       
+        return Response(content=preview_bytes, media_type="image/png")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Preview error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
 
 @app.post("/process")
-async def process_pdf(
+async def process_file(
     file: UploadFile = File(...),
     keywords: str = Form(""),
     header_h: int = Form(0),
@@ -375,41 +365,38 @@ async def process_pdf(
 ):
     """Process PDF and return cleaned version"""
     try:
-        print(f"Processing PDF: {file.filename}")
-        print(f"Keywords: {keywords}")
-        print(f"Header: {header_h}, Footer: {footer_h}, Match case: {match_case}")
-        
+        # Validate file type
+        if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+       
         contents = await file.read()
-        print(f"File size: {len(contents)} bytes")
-        
+       
         if len(contents) == 0:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
-        
+       
+        # Validate file size
+        max_size = 50 * 1024 * 1024
+        if len(contents) > max_size:
+            raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+       
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
-        print(f"Keyword list: {kw_list}")
-        
-        cleaned_pdf = process_pdf_document(contents, kw_list, header_h, footer_h, match_case)
-        print(f"Cleaned PDF size: {len(cleaned_pdf)} bytes")
-        
-        if len(cleaned_pdf) == 0:
-            raise HTTPException(status_code=500, detail="PDF processing resulted in empty file")
-        
+        cleaned = process_pdf_document(contents, kw_list, header_h, footer_h, match_case)
+       
+        filename = file.filename.rsplit('.', 1)[0] if '.' in file.filename else file.filename
+       
         return Response(
-            content=cleaned_pdf,
+            content=cleaned,
             media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=Clean_{file.filename}"
-            }
+            headers={"Content-Disposition": f"attachment; filename=Clean_{filename}.pdf"}
         )
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error processing PDF: {str(e)}")
-        import traceback
+        print(f"Processing error: {str(e)}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"PDF processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
 
-# API Routes - Analytics
+# Analytics Routes
 @app.post("/analytics/track")
 async def track_event(event: AnalyticsEvent, request: Request):
     """Track analytics event"""
@@ -417,40 +404,34 @@ async def track_event(event: AnalyticsEvent, request: Request):
         track_analytics_event(event, request)
         return {"status": "success"}
     except Exception as e:
-        print(f"Analytics tracking error: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/analytics/stats")
 async def get_stats():
-    """Get current analytics statistics (public - only visitor count)"""
+    """Get analytics statistics"""
     try:
-        stats = get_analytics_stats()
-        return stats
+        return get_analytics_stats()
     except Exception as e:
-        print(f"Stats retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analytics/admin-stats")
 async def get_admin_statistics():
     """Get detailed admin statistics"""
     try:
-        stats = get_admin_stats()
-        return stats
+        return get_admin_stats()
     except Exception as e:
-        print(f"Admin stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analytics/user-details")
 async def get_user_details():
-    """Get detailed breakdown of each user's activity"""
+    """Get detailed user activity"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        
-        # Get comprehensive user activity
+       
         cursor.execute("""
             WITH user_stats AS (
-                SELECT 
+                SELECT
                     session_id,
                     SUM(CASE WHEN event_type = 'page_visit' THEN 1 ELSE 0 END) as visit_count,
                     SUM(CASE WHEN event_type = 'file_upload' THEN 1 ELSE 0 END) as upload_count,
@@ -460,7 +441,7 @@ async def get_user_details():
                 FROM analytics
                 GROUP BY session_id
             )
-            SELECT 
+            SELECT
                 session_id,
                 visit_count,
                 upload_count,
@@ -471,10 +452,10 @@ async def get_user_details():
             FROM user_stats
             ORDER BY last_seen DESC
         """)
-        
+       
         rows = cursor.fetchall()
         conn.close()
-        
+       
         users = []
         for row in rows:
             users.append({
@@ -486,40 +467,32 @@ async def get_user_details():
                 "last_seen": row[5],
                 "is_repeat": bool(row[6])
             })
-        
+       
         return {"users": users}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analytics/recent-activity")
-async def get_recent_activity(limit: int = 20):
-    """Get recent activity with user type detection"""
+async def get_recent_activity(limit: int = 50):
+    """Get recent activity events"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        
-        # Get recent events with repeat user detection
+       
         cursor.execute("""
-            WITH session_counts AS (
-                SELECT session_id, COUNT(*) as visit_count
-                FROM analytics
-                WHERE event_type = 'page_visit'
-                GROUP BY session_id
-            )
             SELECT 
-                a.session_id, 
-                a.event_type, 
+                a.session_id,
+                a.event_type,
                 a.timestamp,
-                CASE WHEN sc.visit_count > 1 THEN 1 ELSE 0 END as is_repeat
+                (SELECT COUNT(*) FROM analytics WHERE session_id = a.session_id AND event_type = 'page_visit') > 1 as is_repeat
             FROM analytics a
-            LEFT JOIN session_counts sc ON a.session_id = sc.session_id
             ORDER BY a.timestamp DESC
             LIMIT ?
         """, (limit,))
-        
+       
         rows = cursor.fetchall()
         conn.close()
-        
+       
         activities = []
         for row in rows:
             activities.append({
@@ -528,7 +501,7 @@ async def get_recent_activity(limit: int = 20):
                 "timestamp": row[2],
                 "is_repeat": bool(row[3])
             })
-        
+       
         return {"activities": activities}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -539,76 +512,41 @@ async def export_csv():
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        
+       
         cursor.execute("""
             SELECT session_id, event_type, timestamp, file_size, ip_address
             FROM analytics
             ORDER BY timestamp DESC
         """)
-        
+       
         rows = cursor.fetchall()
         conn.close()
-        
-        # Create CSV
+       
         csv_content = "Session ID,Event Type,Timestamp,File Size,IP Address\n"
         for row in rows:
             csv_content += f"{row[0]},{row[1]},{row[2]},{row[3] or ''},{row[4] or ''}\n"
-        
+       
         return Response(
             content=csv_content,
             media_type="text/csv",
-            headers={
-                "Content-Disposition": f"attachment; filename=analytics_export.csv"
-            }
+            headers={"Content-Disposition": f"attachment; filename=analytics_export.csv"}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-@app.get("/analytics/export")
-async def export_analytics():
-    """Export all analytics data (JSON format)"""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT session_id, event_type, timestamp, file_size, 
-                   file_extension, user_agent, ip_address
-            FROM analytics
-            ORDER BY timestamp DESC
-        """)
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        data = []
-        for row in rows:
-            data.append({
-                "session_id": row[0],
-                "event_type": row[1],
-                "timestamp": row[2],
-                "file_size": row[3],
-                "file_extension": row[4],
-                "user_agent": row[5],
-                "ip_address": row[6]
-            })
-        
-        return JSONResponse(content={"data": data, "total": len(data)})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Mount static files ONLY if frontend directory exists
+# Mount static files
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
     print(f"✅ Static files mounted from: {FRONTEND_DIR}")
 else:
-    print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
+    print(f"⚠️  Warning: Frontend directory not found at {FRONTEND_DIR}")
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
+    print(f"Starting server on port {port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)
