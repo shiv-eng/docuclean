@@ -108,7 +108,6 @@ window.addEventListener('appinstalled', () => {
 // Global state
 let currentFile = null;
 let userSessionId = null;
-let selectedReaction = null;
 
 // DOM elements
 const fileInput = document.getElementById('fileInput');
@@ -136,7 +135,6 @@ const headerVisitorCount = document.getElementById('headerVisitorCount');
 const heroSection = document.getElementById('heroSection');
 const featuresSection = document.getElementById('featuresSection');
 const feedbackModal = document.getElementById('feedbackModal');
-const feedbackEmail = document.getElementById('feedbackEmail');
 
 // Persistent Session ID (localStorage for cross-session tracking)
 function getSessionId() {
@@ -509,13 +507,6 @@ downloadBtn.addEventListener('click', downloadFile);
 // ============================================
 
 function showFeedbackModal() {
-    selectedReaction = null;
-    if (feedbackEmail) feedbackEmail.value = '';
-
-    document.querySelectorAll('.reaction-btn').forEach(btn => {
-        btn.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50');
-    });
-
     feedbackModal.classList.remove('hidden');
 }
 
@@ -550,31 +541,7 @@ function skipFeedback() {
     }
 }
 
-// Submit with email (if you add email field back)
-async function submitFeedback() {
-    const email = feedbackEmail ? feedbackEmail.value.trim() : '';
 
-    // Track email submission if provided
-    if (email && email.includes('@')) {
-        await trackEvent('email_pdf_requested', {
-            email: email
-        });
-    }
-
-    // Track final feedback submission
-    await trackEvent('feedback_submitted', {
-        reaction: selectedReaction,
-        has_email: !!email
-    });
-
-    feedbackModal.classList.add('hidden');
-
-    console.log('✅ Feedback submitted:', { reaction: selectedReaction, email: email ? '(provided)' : '(skipped)' });
-
-    if (removeFileBtn) {
-        removeFileBtn.click();
-    }
-}
 
 // Close modal on outside click
 if (feedbackModal) {

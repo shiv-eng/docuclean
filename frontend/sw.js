@@ -1,11 +1,7 @@
 // DocuClean Service Worker - PWA Support
-const CACHE_NAME = 'docuclean-v1';
+const CACHE_NAME = 'docuclean-v2';
 const STATIC_ASSETS = [
     '/',
-    '/index.html',
-    '/admin.html',
-    '/styles.css',
-    '/app.js',
     '/manifest.json',
     '/icons/icon-192x192.png',
     '/icons/icon-512x512.png'
@@ -60,6 +56,9 @@ self.addEventListener('fetch', (event) => {
     // Skip API requests - always go to network
     if (event.request.url.includes('/api/') ||
         event.request.url.includes('/analytics/') ||
+        event.request.url.includes('/analyze') ||
+        event.request.url.includes('/preview') ||
+        event.request.url.includes('/process') ||
         event.request.url.includes('/clean-pdf') ||
         event.request.url.includes('/remove-watermark')) {
         return;
