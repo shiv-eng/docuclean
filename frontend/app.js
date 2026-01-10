@@ -280,8 +280,16 @@ async function handleFileUpload(file) {
         const data = await response.json();
         const keywords = data.keywords || '';
         
-        keywordsInput.value = keywords;
-        detectedText.textContent = keywords || 'None detected';
+        // Update keywords input and detected text
+        if (keywords && keywords.trim()) {
+            keywordsInput.value = keywords;
+            detectedText.textContent = keywords;
+        } else {
+            keywordsInput.value = '';
+            detectedText.textContent = 'None detected';
+        }
+        
+        console.log('Detected keywords:', keywords);
         
         // ✅ Show uploaded file card in upload section
         uploadedFileName.textContent = file.name;
