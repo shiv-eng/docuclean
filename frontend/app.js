@@ -28,6 +28,8 @@ const helpTooltip = document.getElementById('helpTooltip');
 const footerVisitorCount = document.getElementById('footerVisitorCount');
 const footerUploadCount = document.getElementById('footerUploadCount');
 const headerVisitorCount = document.getElementById('headerVisitorCount');
+const heroSection = document.getElementById('heroSection');
+const featuresSection = document.getElementById('featuresSection');
 
 // Help tooltip toggle
 helpBtn.addEventListener('click', (e) => {
@@ -51,6 +53,9 @@ function getSessionId() {
         // Create new persistent user ID
         userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         localStorage.setItem('pdf_user_id', userId);
+        console.log('✅ New user created:', userId);
+    } else {
+        console.log('✅ Returning user:', userId);
     }
     
     return userId;
@@ -69,6 +74,7 @@ async function trackEvent(eventType, data = {}) {
                 ...data
             })
         });
+        console.log('📊 Tracked event:', eventType);
     } catch (error) {
         console.error('Analytics error:', error);
     }
@@ -131,9 +137,40 @@ fileInput.addEventListener('change', (e) => {
     }
 });
 
-// Remove file and reset
+// ✅ FIXED: Remove file and reset to upload screen
 removeFileBtn.addEventListener('click', () => {
-    location.reload();
+    console.log('🔄 Resetting application...');
+    
+    // Reset file state
+    currentFile = null;
+    fileInput.value = '';
+    
+    // Reset form inputs
+    keywordsInput.value = '';
+    detectedText.textContent = '';
+    previewImage.src = '';
+    matchCaseCheckbox.checked = false;
+    
+    // Reset sliders to default
+    headerSlider.value = 0;
+    footerSlider.value = 25;
+    headerValue.textContent = '0';
+    footerValue.textContent = '25';
+    updateSliderBackground(headerSlider, 0);
+    updateSliderBackground(footerSlider, 25);
+    
+    // Hide uploaded file display and processing section
+    uploadedFileDisplay.classList.add('hidden');
+    processingSection.classList.add('hidden');
+    
+    // Show dropzone, hero and features
+    dropzone.classList.remove('hidden');
+    heroSection.classList.remove('hidden');
+    featuresSection.classList.remove('hidden');
+    uploadSection.classList.remove('hidden');
+    uploadSection.style.display = 'block';
+    
+    console.log('✅ Reset complete - ready for new upload');
 });
 
 // Update slider backgrounds dynamically
@@ -219,11 +256,6 @@ async function handleFileUpload(file) {
     
     currentFile = file;
     
-    // Show uploaded file
-    uploadedFileName.textContent = file.name;
-    uploadedFileDisplay.classList.remove('hidden');
-    dropzone.classList.add('hidden');
-    
     await trackEvent('file_upload', {
         file_size: file.size,
         file_name: file.name.substring(file.name.lastIndexOf('.'))
@@ -251,7 +283,15 @@ async function handleFileUpload(file) {
         keywordsInput.value = keywords;
         detectedText.textContent = keywords || 'None detected';
         
-        uploadSection.style.display = 'none';
+        // ✅ Show uploaded file card in upload section
+        uploadedFileName.textContent = file.name;
+        uploadedFileDisplay.classList.remove('hidden');
+        dropzone.classList.add('hidden');
+        heroSection.classList.add('hidden');
+        featuresSection.classList.add('hidden');
+        
+        // Keep upload section visible but show processing section
+        uploadSection.style.display = 'block';
         processingSection.classList.remove('hidden');
         
         await updatePreview();
@@ -260,7 +300,8 @@ async function handleFileUpload(file) {
     } catch (error) {
         console.error('Upload error:', error);
         alert(`Failed to analyze PDF: ${error.message}`);
-        location.reload();
+        // Reset on error
+        removeFileBtn.click();
     } finally {
         hideLoading();
     }

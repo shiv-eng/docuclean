@@ -20,9 +20,17 @@
                     <p class="text-slate-600 mt-2">DocuClean PDF Watermark Remover Analytics</p>
                     <p class="text-sm text-slate-500 mt-1" id="lastUpdated">Last updated: Loading...</p>
                 </div>
-                <button onclick="location.href='/'" class="bg-slate-600 hover:bg-slate-700 text-white font-medium px-6 py-3 rounded-xl transition-colors">
-                    ← Back to App
-                </button>
+                <div class="flex gap-3">
+                    <button onclick="deleteDatabaseConfirm()" class="bg-red-600 hover:bg-red-700 text-white font-medium px-6 py-3 rounded-xl transition-colors flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        Delete Database
+                    </button>
+                    <button onclick="location.href='/'" class="bg-slate-600 hover:bg-slate-700 text-white font-medium px-6 py-3 rounded-xl transition-colors">
+                        ← Back to App
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -39,7 +47,7 @@
                     <div class="space-y-2 text-sm text-blue-800">
                         <p><strong>📊 Unique Users (New):</strong> Users who have visited the app exactly ONCE. They opened the app for the first time and their visit count = 1.</p>
                         <p><strong>🔄 Repeat Users:</strong> Users who have visited MORE than once. When they close the browser and come back later, their visit count increases (2, 3, 4...). These are returning users.</p>
-                        <p><strong>🔐 Persistent Tracking:</strong> We use localStorage to save a permanent user ID on their device. This means even if they close the browser completely and reopen it days later, we recognize them as the same user and increment their visit count.</p>
+                        <p><strong>🔒 Persistent Tracking:</strong> We use localStorage to save a permanent user ID on their device. This means even if they close the browser completely and reopen it days later, we recognize them as the same user and increment their visit count.</p>
                         <p><strong>📈 Example:</strong> User opens app (visit_count=1, Unique User) → Closes browser → Opens app again next day (visit_count=2, now Repeat User) → Opens again (visit_count=3, still Repeat User)</p>
                     </div>
                 </div>
@@ -156,6 +164,27 @@
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-8 max-w-md mx-4 shadow-2xl">
+            <div class="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mx-auto mb-4">
+                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-bold text-center text-gray-900 mb-2">Delete All Analytics?</h3>
+            <p class="text-center text-gray-600 mb-6">This will permanently delete all analytics data including user tracking, uploads, and downloads. This action cannot be undone.</p>
+            <div class="flex gap-3">
+                <button onclick="closeDeleteModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button onclick="deleteDatabase()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg transition-colors">
+                    Delete Everything
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Format date and time
         function formatDateTime(isoString) {
@@ -186,6 +215,38 @@
                 minute: '2-digit',
                 hour12: true
             });
+        }
+
+        // Delete database functions
+        function deleteDatabaseConfirm() {
+            document.getElementById('deleteModal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.add('hidden');
+        }
+
+        async function deleteDatabase() {
+            try {
+                const response = await fetch('/analytics/delete-database', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ Success! Deleted ${result.records_deleted} records`);
+                    closeDeleteModal();
+                    // Reload stats
+                    loadStats();
+                    loadUserActivity();
+                } else {
+                    alert('❌ Failed to delete database: ' + result.detail);
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                alert('❌ Failed to delete database');
+            }
         }
 
         // Load comprehensive stats
@@ -285,6 +346,13 @@
                 alert('Failed to export data');
             }
         }
+
+        // Close modal on outside click
+        document.getElementById('deleteModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDeleteModal();
+            }
+        });
 
         // Initialize
         loadStats();

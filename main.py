@@ -534,6 +534,34 @@ async def export_csv():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/analytics/delete-database")
+async def delete_database():
+    """Delete all analytics data from database"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Count records before deletion
+        cursor.execute("SELECT COUNT(*) FROM analytics")
+        count_before = cursor.fetchone()[0]
+        
+        # Delete all records
+        cursor.execute("DELETE FROM analytics")
+        
+        # Reset auto-increment counter
+        cursor.execute("DELETE FROM sqlite_sequence WHERE name='analytics'")
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {count_before} records",
+            "records_deleted": count_before
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
@@ -543,7 +571,7 @@ if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
     print(f"✅ Static files mounted from: {FRONTEND_DIR}")
 else:
-    print(f"⚠️  Warning: Frontend directory not found at {FRONTEND_DIR}")
+    print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
 
 if __name__ == "__main__":
     import uvicorn
