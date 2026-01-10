@@ -30,6 +30,7 @@ def init_database():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
    
+    # Events table (existing)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS analytics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +41,21 @@ def init_database():
             file_extension TEXT,
             user_agent TEXT,
             ip_address TEXT
+        )
+    """)
+   
+    # NEW: Users table for tracking user-level data including feedback
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            session_id TEXT PRIMARY KEY,
+            visit_count INTEGER DEFAULT 0,
+            upload_count INTEGER DEFAULT 0,
+            download_count INTEGER DEFAULT 0,
+            first_seen TEXT,
+            last_seen TEXT,
+            reaction TEXT,
+            email TEXT,
+            feedback_timestamp TEXT
         )
     """)
    
@@ -66,6 +82,8 @@ class AnalyticsEvent(BaseModel):
     timestamp: str
     file_size: Optional[int] = None
     file_name: Optional[str] = None
+    reaction: Optional[str] = None
+    email: Optional[str] = None
 
 class AnalyticsStats(BaseModel):
     unique_visitors: int
@@ -81,6 +99,63 @@ class AdminStats(BaseModel):
     page_visits: int
 
 # Analytics functions
+def update_user_record(session_id: str, event_type: str, timestamp: str, reaction: str = None, email: str = None):
+    """Update or create user record in users table"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute("SELECT * FROM users WHERE session_id = ?", (session_id,))
+        user = cursor.fetchone()
+        
+        if user is None:
+            # Create new user
+            cursor.execute("""
+                INSERT INTO users (session_id, visit_count, upload_count, download_count, first_seen, last_seen)
+                VALUES (?, 0, 0, 0, ?, ?)
+            """, (session_id, timestamp, timestamp))
+        
+        # Update counts based on event type
+        if event_type == 'page_visit':
+            cursor.execute("""
+                UPDATE users 
+                SET visit_count = visit_count + 1, last_seen = ?
+                WHERE session_id = ?
+            """, (timestamp, session_id))
+        elif event_type == 'file_upload':
+            cursor.execute("""
+                UPDATE users 
+                SET upload_count = upload_count + 1, last_seen = ?
+                WHERE session_id = ?
+            """, (timestamp, session_id))
+        elif event_type == 'file_download':
+            cursor.execute("""
+                UPDATE users 
+                SET download_count = download_count + 1, last_seen = ?
+                WHERE session_id = ?
+            """, (timestamp, session_id))
+        elif event_type.startswith('reaction_'):
+            # Store the reaction (love, good, okay)
+            reaction_value = event_type.replace('reaction_', '')
+            cursor.execute("""
+                UPDATE users 
+                SET reaction = ?, feedback_timestamp = ?, last_seen = ?
+                WHERE session_id = ?
+            """, (reaction_value, timestamp, timestamp, session_id))
+        elif event_type == 'email_pdf_requested' and email:
+            # Store the email
+            cursor.execute("""
+                UPDATE users 
+                SET email = ?, last_seen = ?
+                WHERE session_id = ?
+            """, (email, timestamp, session_id))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error updating user record: {e}")
+
 def track_analytics_event(event: AnalyticsEvent, request: Request):
     """Store analytics event in database"""
     try:
@@ -92,6 +167,7 @@ def track_analytics_event(event: AnalyticsEvent, request: Request):
         if "," in ip_address:
             ip_address = ip_address.split(",")[0].strip()
        
+        # Store in events table
         cursor.execute("""
             INSERT INTO analytics (session_id, event_type, timestamp, file_size, file_extension, user_agent, ip_address)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -107,6 +183,10 @@ def track_analytics_event(event: AnalyticsEvent, request: Request):
        
         conn.commit()
         conn.close()
+        
+        # Update user record
+        update_user_record(event.session_id, event.event_type, event.timestamp, event.reaction, event.email)
+        
     except Exception as e:
         print(f"Analytics error: {e}")
 
@@ -115,15 +195,15 @@ def get_analytics_stats() -> AnalyticsStats:
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
    
-    # Count unique users (by session_id)
-    cursor.execute("SELECT COUNT(DISTINCT session_id) FROM analytics WHERE event_type = 'page_visit'")
+    # Count unique users from users table
+    cursor.execute("SELECT COUNT(*) FROM users")
     unique_visitors = cursor.fetchone()[0]
    
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
-    total_uploads = cursor.fetchone()[0]
+    cursor.execute("SELECT SUM(upload_count) FROM users")
+    total_uploads = cursor.fetchone()[0] or 0
    
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
-    total_downloads = cursor.fetchone()[0]
+    cursor.execute("SELECT SUM(download_count) FROM users")
+    total_downloads = cursor.fetchone()[0] or 0
    
     cursor.execute("SELECT COUNT(*) FROM analytics")
     total_events = cursor.fetchone()[0]
@@ -142,26 +222,21 @@ def get_admin_stats() -> AdminStats:
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
    
-    # Get all unique users with their visit counts
-    cursor.execute("""
-        SELECT session_id, COUNT(*) as visit_count
-        FROM analytics
-        WHERE event_type = 'page_visit'
-        GROUP BY session_id
-    """)
+    # Get user counts from users table
+    cursor.execute("SELECT COUNT(*) FROM users WHERE visit_count = 1")
+    unique_users = cursor.fetchone()[0]
     
-    users = cursor.fetchall()
-    unique_users = sum(1 for _, count in users if count == 1)
-    repeat_users = sum(1 for _, count in users if count > 1)
+    cursor.execute("SELECT COUNT(*) FROM users WHERE visit_count > 1")
+    repeat_users = cursor.fetchone()[0]
    
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_upload'")
-    total_uploads = cursor.fetchone()[0]
+    cursor.execute("SELECT SUM(upload_count) FROM users")
+    total_uploads = cursor.fetchone()[0] or 0
    
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'file_download'")
-    total_downloads = cursor.fetchone()[0]
+    cursor.execute("SELECT SUM(download_count) FROM users")
+    total_downloads = cursor.fetchone()[0] or 0
    
-    cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'page_visit'")
-    page_visits = cursor.fetchone()[0]
+    cursor.execute("SELECT SUM(visit_count) FROM users")
+    page_visits = cursor.fetchone()[0] or 0
    
     conn.close()
    
@@ -293,18 +368,15 @@ async def serve_admin():
 async def analyze_pdf(file: UploadFile = File(...)):
     """Analyze PDF and detect watermark candidates"""
     try:
-        # Validate file type
         if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
        
         contents = await file.read()
        
-        # Validate PDF content
         if len(contents) == 0:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
        
-        # Validate file size (50MB max)
-        max_size = 50 * 1024 * 1024  # 50MB
+        max_size = 50 * 1024 * 1024
         if len(contents) > max_size:
             raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
        
@@ -327,7 +399,6 @@ async def preview_file(
 ):
     """Generate preview of cleaned PDF"""
     try:
-        # Validate file type
         if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
        
@@ -336,7 +407,6 @@ async def preview_file(
         if len(contents) == 0:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
        
-        # Validate file size
         max_size = 50 * 1024 * 1024
         if len(contents) > max_size:
             raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
@@ -365,7 +435,6 @@ async def process_file(
 ):
     """Process PDF and return cleaned version"""
     try:
-        # Validate file type
         if not file.content_type == "application/pdf" and not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
        
@@ -374,7 +443,6 @@ async def process_file(
         if len(contents) == 0:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
        
-        # Validate file size
         max_size = 50 * 1024 * 1024
         if len(contents) > max_size:
             raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
@@ -424,23 +492,12 @@ async def get_admin_statistics():
 
 @app.get("/analytics/user-details")
 async def get_user_details():
-    """Get detailed user activity"""
+    """Get detailed user activity from users table"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
        
         cursor.execute("""
-            WITH user_stats AS (
-                SELECT
-                    session_id,
-                    SUM(CASE WHEN event_type = 'page_visit' THEN 1 ELSE 0 END) as visit_count,
-                    SUM(CASE WHEN event_type = 'file_upload' THEN 1 ELSE 0 END) as upload_count,
-                    SUM(CASE WHEN event_type = 'file_download' THEN 1 ELSE 0 END) as download_count,
-                    MIN(timestamp) as first_seen,
-                    MAX(timestamp) as last_seen
-                FROM analytics
-                GROUP BY session_id
-            )
             SELECT
                 session_id,
                 visit_count,
@@ -448,8 +505,10 @@ async def get_user_details():
                 download_count,
                 first_seen,
                 last_seen,
-                CASE WHEN visit_count > 1 THEN 1 ELSE 0 END as is_repeat
-            FROM user_stats
+                CASE WHEN visit_count > 1 THEN 1 ELSE 0 END as is_repeat,
+                reaction,
+                email
+            FROM users
             ORDER BY last_seen DESC
         """)
        
@@ -465,7 +524,9 @@ async def get_user_details():
                 "download_count": row[3],
                 "first_seen": row[4],
                 "last_seen": row[5],
-                "is_repeat": bool(row[6])
+                "is_repeat": bool(row[6]),
+                "reaction": row[7],
+                "email": row[8]
             })
        
         return {"users": users}
@@ -484,8 +545,9 @@ async def get_recent_activity(limit: int = 50):
                 a.session_id,
                 a.event_type,
                 a.timestamp,
-                (SELECT COUNT(*) FROM analytics WHERE session_id = a.session_id AND event_type = 'page_visit') > 1 as is_repeat
+                u.visit_count > 1 as is_repeat
             FROM analytics a
+            LEFT JOIN users u ON a.session_id = u.session_id
             ORDER BY a.timestamp DESC
             LIMIT ?
         """, (limit,))
@@ -514,17 +576,25 @@ async def export_csv():
         cursor = conn.cursor()
        
         cursor.execute("""
-            SELECT session_id, event_type, timestamp, file_size, ip_address
-            FROM analytics
-            ORDER BY timestamp DESC
+            SELECT 
+                u.session_id,
+                u.visit_count,
+                u.upload_count,
+                u.download_count,
+                u.first_seen,
+                u.last_seen,
+                u.reaction,
+                u.email
+            FROM users u
+            ORDER BY u.last_seen DESC
         """)
        
         rows = cursor.fetchall()
         conn.close()
        
-        csv_content = "Session ID,Event Type,Timestamp,File Size,IP Address\n"
+        csv_content = "Session ID,Visits,Uploads,Downloads,First Seen,Last Seen,Reaction,Email\n"
         for row in rows:
-            csv_content += f"{row[0]},{row[1]},{row[2]},{row[3] or ''},{row[4] or ''}\n"
+            csv_content += f"{row[0]},{row[1]},{row[2]},{row[3]},{row[4]},{row[5]},{row[6] or ''},{row[7] or ''}\n"
        
         return Response(
             content=csv_content,
@@ -547,6 +617,7 @@ async def delete_database():
         
         # Delete all records
         cursor.execute("DELETE FROM analytics")
+        cursor.execute("DELETE FROM users")
         
         # Reset auto-increment counter
         cursor.execute("DELETE FROM sqlite_sequence WHERE name='analytics'")
@@ -558,6 +629,66 @@ async def delete_database():
             "status": "success",
             "message": f"Successfully deleted {count_before} records",
             "records_deleted": count_before
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/events")
+async def get_all_events():
+    """Get all events - needed for admin panel to count reactions"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT session_id, event_type, timestamp
+            FROM analytics
+            ORDER BY timestamp DESC
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        events = [{"session_id": r[0], "event_type": r[1], "timestamp": r[2]} for r in rows]
+        return {"events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/pmf-stats")
+async def get_pmf_stats():
+    """Get PMF statistics - power users and ALL reaction counts from events"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Count ALL reactions from analytics events table (not users table)
+        # This counts every feedback event, even if same user gives feedback multiple times
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_love'")
+        love_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_good'")
+        good_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_okay'")
+        okay_count = cursor.fetchone()[0]
+        
+        # Count ALL email submission events
+        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'email_pdf_requested'")
+        emails_collected = cursor.fetchone()[0]
+        
+        # Count power users (users with 3+ downloads) - still from users table
+        cursor.execute("SELECT COUNT(*) FROM users WHERE download_count >= 3")
+        power_users = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            "power_users": power_users,
+            "love_reactions": love_count,
+            "good_reactions": good_count,
+            "okay_reactions": okay_count,
+            "emails_collected": emails_collected,
+            "total_reactions": love_count + good_count + okay_count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
