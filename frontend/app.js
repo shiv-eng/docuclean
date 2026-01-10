@@ -1,3 +1,110 @@
+// ============================================
+// PWA SERVICE WORKER REGISTRATION
+// ============================================
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('✅ ServiceWorker registered:', registration.scope);
+
+            // Check for updates periodically
+            setInterval(() => {
+                registration.update();
+            }, 60 * 60 * 1000); // Every hour
+        } catch (error) {
+            console.log('❌ ServiceWorker registration failed:', error);
+        }
+    });
+}
+
+// PWA Install Prompt
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('📱 PWA Install prompt available');
+
+    // Show install button after a delay (less intrusive)
+    setTimeout(() => {
+        showInstallBanner();
+    }, 10000); // Show after 10 seconds
+});
+
+function showInstallBanner() {
+    if (!deferredPrompt) return;
+
+    // Create install banner
+    const banner = document.createElement('div');
+    banner.id = 'pwaInstallBanner';
+    banner.className = 'fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl p-4 shadow-2xl z-50 transform transition-all duration-300';
+    banner.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <div class="flex-1">
+                <p class="font-bold text-sm mb-1">Install DocuClean</p>
+                <p class="text-xs opacity-90 mb-3">Add to home screen for quick access & offline use</p>
+                <div class="flex gap-2">
+                    <button id="pwaInstallBtn" class="bg-white text-indigo-600 font-bold text-sm px-4 py-2 rounded-lg hover:bg-indigo-50 transition-colors">
+                        Install
+                    </button>
+                    <button id="pwaDismissBtn" class="text-white/80 hover:text-white text-sm px-3 py-2 transition-colors">
+                        Later
+                    </button>
+                </div>
+            </div>
+            <button id="pwaCloseBtn" class="text-white/60 hover:text-white transition-colors p-1">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Animate in
+    setTimeout(() => {
+        banner.classList.add('translate-y-0', 'opacity-100');
+    }, 100);
+
+    // Install button click
+    document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log('📱 Install outcome:', outcome);
+            deferredPrompt = null;
+        }
+        banner.remove();
+    });
+
+    // Dismiss buttons
+    const dismissBanner = () => {
+        banner.classList.add('translate-y-full', 'opacity-0');
+        setTimeout(() => banner.remove(), 300);
+    };
+
+    document.getElementById('pwaDismissBtn').addEventListener('click', dismissBanner);
+    document.getElementById('pwaCloseBtn').addEventListener('click', dismissBanner);
+}
+
+// Handle app installed event
+window.addEventListener('appinstalled', () => {
+    console.log('✅ PWA was installed');
+    deferredPrompt = null;
+    const banner = document.getElementById('pwaInstallBanner');
+    if (banner) banner.remove();
+});
+
+// ============================================
+// MAIN APPLICATION CODE
+// ============================================
+
 // Global state
 let currentFile = null;
 let userSessionId = null;

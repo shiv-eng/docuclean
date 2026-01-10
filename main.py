@@ -71,7 +71,7 @@ def init_database():
    
     conn.commit()
     conn.close()
-    print("✅ Database initialized successfully")
+    print("[OK] Database initialized successfully")
 
 init_database()
 
@@ -363,6 +363,31 @@ async def serve_admin():
     if not os.path.exists(admin_path):
         raise HTTPException(status_code=404, detail=f"Admin dashboard not found")
     return FileResponse(admin_path)
+
+# PWA Routes
+@app.get("/manifest.json")
+async def serve_manifest():
+    """Serve PWA manifest"""
+    manifest_path = os.path.join(FRONTEND_DIR, "manifest.json")
+    if not os.path.exists(manifest_path):
+        raise HTTPException(status_code=404, detail="Manifest not found")
+    return FileResponse(manifest_path, media_type="application/manifest+json")
+
+@app.get("/sw.js")
+async def serve_service_worker():
+    """Serve service worker with correct MIME type"""
+    sw_path = os.path.join(FRONTEND_DIR, "sw.js")
+    if not os.path.exists(sw_path):
+        raise HTTPException(status_code=404, detail="Service worker not found")
+    return FileResponse(sw_path, media_type="application/javascript")
+
+@app.get("/icons/{icon_name}")
+async def serve_icon(icon_name: str):
+    """Serve PWA icons"""
+    icon_path = os.path.join(FRONTEND_DIR, "icons", icon_name)
+    if not os.path.exists(icon_path):
+        raise HTTPException(status_code=404, detail="Icon not found")
+    return FileResponse(icon_path, media_type="image/png")
 
 @app.post("/analyze")
 async def analyze_pdf(file: UploadFile = File(...)):
@@ -656,27 +681,26 @@ async def get_all_events():
 
 @app.get("/analytics/pmf-stats")
 async def get_pmf_stats():
-    """Get PMF statistics - power users and ALL reaction counts from events"""
+    """Get PMF statistics - power users and reaction counts"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Count ALL reactions from analytics events table (not users table)
-        # This counts every feedback event, even if same user gives feedback multiple times
-        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_love'")
+        # Count reactions from users table
+        cursor.execute("SELECT COUNT(*) FROM users WHERE reaction = 'love'")
         love_count = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_good'")
+        cursor.execute("SELECT COUNT(*) FROM users WHERE reaction = 'good'")
         good_count = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'reaction_okay'")
+        cursor.execute("SELECT COUNT(*) FROM users WHERE reaction = 'okay'")
         okay_count = cursor.fetchone()[0]
         
-        # Count ALL email submission events
-        cursor.execute("SELECT COUNT(*) FROM analytics WHERE event_type = 'email_pdf_requested'")
+        # Count emails collected
+        cursor.execute("SELECT COUNT(*) FROM users WHERE email IS NOT NULL AND email != ''")
         emails_collected = cursor.fetchone()[0]
         
-        # Count power users (users with 3+ downloads) - still from users table
+        # Count power users (users with 3+ downloads)
         cursor.execute("SELECT COUNT(*) FROM users WHERE download_count >= 3")
         power_users = cursor.fetchone()[0]
         
@@ -687,8 +711,7 @@ async def get_pmf_stats():
             "love_reactions": love_count,
             "good_reactions": good_count,
             "okay_reactions": okay_count,
-            "emails_collected": emails_collected,
-            "total_reactions": love_count + good_count + okay_count
+            "emails_collected": emails_collected
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -700,9 +723,9 @@ async def health_check():
 # Mount static files
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-    print(f"✅ Static files mounted from: {FRONTEND_DIR}")
+    print(f"[OK] Static files mounted from: {FRONTEND_DIR}")
 else:
-    print(f"⚠️ Warning: Frontend directory not found at {FRONTEND_DIR}")
+    print(f"[WARNING] Frontend directory not found at {FRONTEND_DIR}")
 
 if __name__ == "__main__":
     import uvicorn
