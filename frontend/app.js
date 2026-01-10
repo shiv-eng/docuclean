@@ -280,19 +280,22 @@ async function handleFileUpload(file) {
         const data = await response.json();
         const keywords = data.keywords || '';
         
-        // Update keywords input and detected text
-        if (keywords && keywords.trim()) {
-            keywordsInput.value = keywords;
-            detectedText.textContent = keywords;
+        // Update keywords input and detected text - filter out image metadata
+        let cleanKeywords = '';
+        if (keywords && keywords.trim() && !keywords.includes('<image:')) {
+            cleanKeywords = keywords;
+            keywordsInput.value = cleanKeywords;
+            detectedText.textContent = cleanKeywords;
         } else {
             keywordsInput.value = '';
             detectedText.textContent = 'None detected';
         }
         
-        console.log('Detected keywords:', keywords);
+        console.log('Detected keywords:', cleanKeywords);
         
         // ✅ Show uploaded file card in upload section
         uploadedFileName.textContent = file.name;
+        uploadedFileName.title = file.name; // Add tooltip for long names
         uploadedFileDisplay.classList.remove('hidden');
         dropzone.classList.add('hidden');
         heroSection.classList.add('hidden');
